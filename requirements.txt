@@ -1,0 +1,5 @@
+streamlit
+pandas
+uuid
+os
+re

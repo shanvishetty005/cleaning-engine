@@ -1,0 +1,15 @@
+# Generated outputs
+outputs/
+datasets/cleaned/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual env
+.venv/
+env/
+venv/
+
+# OS files
+.DS_Store
