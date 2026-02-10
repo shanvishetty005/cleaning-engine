@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 # -----------------------------
-# Corporate Styling (Blue + Green)
+# Corporate Styling
 # -----------------------------
 st.markdown(
     """
@@ -39,26 +39,12 @@ st.markdown(
             border: none;
             font-weight: 600;
         }
-        div.stButton > button:hover {
-            filter: brightness(1.05);
-        }
-
-        div.stDownloadButton > button {
-            border-radius: 10px;
-            padding: 0.6rem 1rem;
-            font-weight: 600;
-        }
 
         .card {
             border: 1px solid rgba(255,255,255,0.08);
             border-radius: 14px;
             padding: 18px;
             background: rgba(255,255,255,0.02);
-        }
-
-        .muted {
-            color: rgba(255,255,255,0.65);
-            font-size: 0.95rem;
         }
 
         .footer {
@@ -75,17 +61,30 @@ st.markdown(
 )
 
 # -----------------------------
+# Reference Folder Setup
+# -----------------------------
+REF_DIR = "datasets/reference"
+os.makedirs(REF_DIR, exist_ok=True)
+
+
+def save_if_uploaded(uploaded_file, filename):
+    if uploaded_file is not None:
+        path = os.path.join(REF_DIR, filename)
+        with open(path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        return path
+    return None
+
+
+# -----------------------------
 # Header
 # -----------------------------
 st.title("Cleaning Engine")
-st.write(
-    "<div class='muted'>Upload a CSV file, apply cleaning rules, and export standardized outputs.</div>",
-    unsafe_allow_html=True
-)
+st.write("Upload a CSV file, apply cleaning rules, and export standardized outputs.")
 st.divider()
 
 # -----------------------------
-# Session-specific output folder
+# Session Output Folder
 # -----------------------------
 session_id = st.session_state.get("session_id")
 if not session_id:
@@ -95,10 +94,9 @@ if not session_id:
 output_dir = os.path.join("outputs", session_id)
 
 # -----------------------------
-# Sidebar
+# Sidebar Config
 # -----------------------------
 st.sidebar.header("Configuration")
-st.sidebar.write("Select the operations to apply during cleaning:")
 
 if "select_all_ops" not in st.session_state:
     st.session_state["select_all_ops"] = True
@@ -129,45 +127,59 @@ config = {
 
 st.sidebar.divider()
 
-st.sidebar.subheader("Export Options")
 export_powerbi = st.sidebar.checkbox("Generate Power BI Output", value=True)
 generate_report = st.sidebar.checkbox("Generate Comparison Report", value=True)
 
 st.sidebar.divider()
 
-# -----------------------------
-# Sidebar About Section
-# -----------------------------
 with st.sidebar.expander("About Cleaning Engine", expanded=True):
-    st.markdown(
-        """
-        **Purpose**  
-        Cleaning Engine is an internal tool for standardizing and cleaning raw CSV datasets.
+    st.markdown("""
+    **Purpose**
+    Internal CSV cleaning + standardization engine.
 
-        **Outputs Generated**
-        - Cleaned dataset (standardized + cleaned)
-        - Power BI friendly dataset (optional)
-        - Comparison report (optional)
-
-        **How to Use**
-        1. Upload a CSV file  
-        2. Choose cleaning operations (or use Select All)  
-        3. Click Run Cleaning  
-        4. Download the generated outputs
-        """
-    )
-
-st.sidebar.caption("Recommended: Keep default settings for standard workflow.")
+    **Outputs**
+    - Cleaned dataset
+    - Power BI dataset
+    - Comparison report
+    """)
 
 # -----------------------------
-# Main Layout
+# Layout
 # -----------------------------
-left, right = st.columns([1.25, 1])
+left, right = st.columns([1.3, 1])
 
 with left:
+
     st.subheader("1) Upload Data")
     st.write("<div class='card'>", unsafe_allow_html=True)
     uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
+    st.write("</div>", unsafe_allow_html=True)
+
+    # -----------------------------
+    # NEW: Reference Files Upload
+    # -----------------------------
+    st.subheader("Reference Files (Optional)")
+    st.write("<div class='card'>", unsafe_allow_html=True)
+
+    company_master_file = st.file_uploader(
+        "Company Master File",
+        type=["csv"],
+        key="company_master"
+    )
+
+    company_additions_file = st.file_uploader(
+        "Company Master Additions",
+        type=["csv"],
+        key="company_additions"
+    )
+
+    review_file = st.file_uploader(
+        "Importer Needs Review List",
+        type=["csv"],
+        key="review_list"
+    )
+
+    st.caption("If not uploaded → default reference files will be used.")
     st.write("</div>", unsafe_allow_html=True)
 
     st.subheader("2) Run Cleaning")
@@ -179,105 +191,85 @@ with right:
     st.subheader("File Details")
     st.write("<div class='card'>", unsafe_allow_html=True)
 
-    if uploaded_file is None:
-        st.write("No file uploaded.")
+    if uploaded_file:
+        st.write("File:", uploaded_file.name)
     else:
-        st.write("File Name:", uploaded_file.name)
+        st.write("No file uploaded.")
 
     st.write("</div>", unsafe_allow_html=True)
 
 # -----------------------------
-# Run Cleaning Action
+# Run Cleaning
 # -----------------------------
-if uploaded_file is None:
-    st.info("Please upload a CSV file to begin.")
-else:
-    if run_clicked:
-        os.makedirs(output_dir, exist_ok=True)
+if uploaded_file and run_clicked:
 
-        input_csv_path = os.path.join(output_dir, "raw_uploaded.csv")
-        with open(input_csv_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+    os.makedirs(output_dir, exist_ok=True)
 
-        start_time = time.time()
+    input_csv_path = os.path.join(output_dir, "raw_uploaded.csv")
 
-        with st.spinner("Processing..."):
-            cleaned_df, summary, outputs = run_cleaning_job(
-                input_csv_path=input_csv_path,
-                output_dir=output_dir,
-                config=config
-            )
+    with open(input_csv_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
 
-        end_time = time.time()
-        exec_time = round(end_time - start_time, 2)
+    # ✅ Save reference files if provided
+    save_if_uploaded(company_master_file, "company_master.csv")
+    save_if_uploaded(company_additions_file, "company_master_additions.csv")
+    save_if_uploaded(review_file, "importer_needs_review.csv")
 
-        # Respect export toggles
-        if not export_powerbi:
-            outputs.pop("powerbi_file", None)
+    start = time.time()
 
-        if not generate_report:
-            outputs.pop("comparison_report", None)
+    with st.spinner("Processing..."):
+        cleaned_df, summary, outputs = run_cleaning_job(
+            input_csv_path=input_csv_path,
+            output_dir=output_dir,
+            config=config
+        )
 
-        # Result Section
-        st.divider()
-        st.subheader("Results")
+    exec_time = round(time.time() - start, 2)
 
-        # Summary card
-        st.write("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("**Cleaning Summary**")
-        st.json(summary)
+    if not export_powerbi:
+        outputs.pop("powerbi_file", None)
 
-        st.markdown("**Execution Statistics**")
-        stats_col1, stats_col2, stats_col3 = st.columns(3)
-        stats_col1.metric("Rows", cleaned_df.shape[0])
-        stats_col2.metric("Columns", cleaned_df.shape[1])
-        stats_col3.metric("Execution Time (s)", exec_time)
+    if not generate_report:
+        outputs.pop("comparison_report", None)
 
-        st.write("</div>", unsafe_allow_html=True)
+    # -----------------------------
+    # Results
+    # -----------------------------
+    st.divider()
+    st.subheader("Results")
 
-        # Preview card
-        st.write("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("**Preview (first 20 rows)**")
-        st.dataframe(cleaned_df.head(20), use_container_width=True)
-        st.write("</div>", unsafe_allow_html=True)
+    st.write("<div class='card'>", unsafe_allow_html=True)
+    st.json(summary)
 
-        # Downloads
-        st.subheader("Downloads")
-        d1, d2, d3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Rows", cleaned_df.shape[0])
+    c2.metric("Columns", cleaned_df.shape[1])
+    c3.metric("Time (s)", exec_time)
 
-        with d1:
-            with open(outputs["cleaned_file"], "rb") as f:
-                st.download_button(
-                    label="Download Cleaned File",
-                    data=f,
-                    file_name="cleaned_file.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
+    st.write("</div>", unsafe_allow_html=True)
 
-        if "powerbi_file" in outputs:
-            with d2:
-                with open(outputs["powerbi_file"], "rb") as f:
-                    st.download_button(
-                        label="Download Power BI Output",
-                        data=f,
-                        file_name="cleaned_for_powerbi.csv",
-                        mime="text/csv",
-                        use_container_width=True
-                    )
+    st.write("<div class='card'>", unsafe_allow_html=True)
+    st.dataframe(cleaned_df.head(20), use_container_width=True)
+    st.write("</div>", unsafe_allow_html=True)
 
-        if "comparison_report" in outputs:
-            with d3:
-                with open(outputs["comparison_report"], "rb") as f:
-                    st.download_button(
-                        label="Download Comparison Report",
-                        data=f,
-                        file_name="comparison_report.csv",
-                        mime="text/csv",
-                        use_container_width=True
-                    )
+    # -----------------------------
+    # Downloads
+    # -----------------------------
+    st.subheader("Downloads")
 
-        st.success("Completed successfully.")
+    if "cleaned_file" in outputs:
+        with open(outputs["cleaned_file"], "rb") as f:
+            st.download_button("Download Cleaned File", f, "cleaned_file.csv")
+
+    if "powerbi_file" in outputs:
+        with open(outputs["powerbi_file"], "rb") as f:
+            st.download_button("Download Power BI File", f, "cleaned_powerbi.csv")
+
+    if "comparison_report" in outputs:
+        with open(outputs["comparison_report"], "rb") as f:
+            st.download_button("Download Comparison Report", f, "comparison.csv")
+
+    st.success("Cleaning completed successfully.")
 
 # -----------------------------
 # Footer
