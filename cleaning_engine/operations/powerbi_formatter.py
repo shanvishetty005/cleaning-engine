@@ -9,13 +9,25 @@ POWERBI_COLUMNS = [
     "exporter_name",
     "exporter_country",
     "country_of_origin",
+
+    # product
     "product_details_short",
+
+    # values
     "usd_fob",
     "usd_cif",
+
+    # weights + units
     "gross_weight",
+    "gross_weight_unit",
     "net_weight",
+    "net_weight_unit",
+
+    # quantity + packages
     "quantity",
+    "quantity_unit",
     "package_amount",
+    "packages_unit",
 ]
 
 

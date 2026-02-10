@@ -20,7 +20,7 @@ DEFAULT_CONFIG = {
 
 
 # -------------------------------------------------
-# ✅ Power BI formatter layer (NEW)
+# ✅ Power BI formatter layer (UPDATED)
 # -------------------------------------------------
 def make_powerbi_ready(df: pd.DataFrame) -> pd.DataFrame:
 
@@ -32,25 +32,57 @@ def make_powerbi_ready(df: pd.DataFrame) -> pd.DataFrame:
         "exporter_name",
         "exporter_country",
         "country_of_origin",
+
+        # product
         "product_details_short",
+
+        # values
         "usd_fob",
         "usd_cif",
+
+        # weights + UNITS ✅
         "gross_weight",
+        "gross_weight_unit",
         "net_weight",
+        "net_weight_unit",
+
+        # quantity + UNITS ✅
         "quantity",
-        "package_amount"
+        "quantity_unit",
+
+        # packages + UNITS ✅
+        "package_amount",
+        "packages_unit"
     ]
 
     existing = [c for c in keep_cols if c in df.columns]
-
     pb_df = df[existing].copy()
 
-    # business-friendly rename
+    # -------------------------
+    # Business friendly rename
+    # -------------------------
     pb_df = pb_df.rename(columns={
         "product_details_short": "product",
         "usd_fob": "fob_usd",
         "usd_cif": "cif_usd"
     })
+
+    # -------------------------
+    # Time features (PowerBI loves this)
+    # -------------------------
+    if "arrival_date" in pb_df.columns:
+        pb_df["arrival_date"] = pd.to_datetime(pb_df["arrival_date"], errors="coerce")
+        pb_df["year"] = pb_df["arrival_date"].dt.year
+        pb_df["month"] = pb_df["arrival_date"].dt.month
+
+    # -------------------------
+    # Derived metrics
+    # -------------------------
+    if "cif_usd" in pb_df.columns and "net_weight" in pb_df.columns:
+        pb_df["value_per_kg"] = pb_df["cif_usd"] / pb_df["net_weight"].replace(0, pd.NA)
+
+    if "cif_usd" in pb_df.columns and "quantity" in pb_df.columns:
+        pb_df["value_per_unit"] = pb_df["cif_usd"] / pb_df["quantity"].replace(0, pd.NA)
 
     return pb_df
 
@@ -88,7 +120,7 @@ def run_cleaning_job(input_csv_path: str, output_dir: str = "outputs", config: d
 
     # -----------------------------
     # SAVE FULL CLEANED FILE
-    # (engineering / audit version)
+    # Engineering / ML / audit version
     # -----------------------------
     cleaned_df.to_csv(cleaned_output_path, index=False)
 
@@ -97,7 +129,7 @@ def run_cleaning_job(input_csv_path: str, output_dir: str = "outputs", config: d
     # -----------------------------
     powerbi_df = make_powerbi_ready(cleaned_df)
 
-    # fill nulls safely for BI tools
+    # Fill nulls safely for BI tools
     string_cols = powerbi_df.select_dtypes(include=["object", "string"]).columns
     powerbi_df[string_cols] = powerbi_df[string_cols].fillna("NULL")
 

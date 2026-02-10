@@ -2,24 +2,30 @@ import pandas as pd
 import re
 from cleaning_engine.heuristics.numeric_heuristic import should_convert_to_numeric
 
-# Keeps only digits, decimal point and minus sign
-NUMERIC_CLEAN_REGEX = re.compile(r"[^0-9\.\-]")
 
-NULL_TOKENS = {"", "NA", "N/A", "NULL", "NONE", "NAN", "not_a_number", "not_a_numeric"}
+NULL_TOKENS = {
+    "", "NA", "N/A", "NULL", "NONE", "NAN",
+    "not_a_number", "not_a_numeric"
+}
 
+
+# -----------------------------------
+# Numeric Cleaner
+# -----------------------------------
 
 def clean_numeric_value(x):
     """
-    Cleans a single numeric value by removing:
-    - currency symbols (₹, $, etc.)
-    - commas
-    - units stuck to numbers (kg, lb)
-    - random symbols (#$_+- etc.)
-    Keeps:
-    - digits
-    - one decimal point
-    - negative sign
+    Strong numeric cleaner
+
+    Handles:
+    $434 → 434
+    ₹12,400 → 12400
+    USD -23870.13 → -23870.13
+    --233 → -233
+    12kg → 12
+    garbage → NA
     """
+
     if pd.isna(x):
         return pd.NA
 
@@ -28,45 +34,88 @@ def clean_numeric_value(x):
     if s.upper() in NULL_TOKENS:
         return pd.NA
 
-    # Remove commas first
+    # remove commas
     s = s.replace(",", "")
 
-    # Remove all non-numeric chars except dot and minus
-    s = NUMERIC_CLEAN_REGEX.sub("", s)
+    # detect negativity by odd minus count
+    minus_count = s.count("-")
+    is_negative = minus_count % 2 == 1
 
-    # Handle cases where cleaning makes it invalid
-    if s in {"", "-", ".", "-.", ".-"}:
+    # keep only digits and dots
+    s = re.sub(r"[^0-9.]", "", s)
+
+    # fix multiple dots
+    if s.count(".") > 1:
+        first, *rest = s.split(".")
+        s = first + "." + "".join(rest)
+
+    if s == "" or s == ".":
         return pd.NA
+
+    if is_negative:
+        s = "-" + s
 
     return s
 
 
+# -----------------------------------
+# Sign Consistency Fixer
+# -----------------------------------
+
+def _align_sign(df, a, b):
+    if a in df.columns and b in df.columns:
+        mask = (df[a] < 0) & (df[b] > 0)
+        df.loc[mask, b] = -df.loc[mask, b]
+
+        mask = (df[a] > 0) & (df[b] < 0)
+        df.loc[mask, b] = -df.loc[mask, b]
+
+
+# -----------------------------------
+# Main Numeric Conversion Engine
+# -----------------------------------
+
 def infer_numeric_columns(df: pd.DataFrame):
-    """
-    Convert numeric-looking columns safely.
-    - Removes prefixes/suffixes like ₹, $, kg, commas, random symbols
-    - Invalid values → 0 (as per your system requirement)
-    - Uses heuristic-based conversion
-    """
+
     converted_cols = []
 
     for col in df.columns:
         series = df[col]
 
-        # Skip datetime columns
+        # skip datetime
         if pd.api.types.is_datetime64_any_dtype(series):
             continue
 
         if should_convert_to_numeric(series):
 
             cleaned = series.apply(clean_numeric_value)
-
             numeric = pd.to_numeric(cleaned, errors="coerce")
 
-            # Convert only if meaningful
+            # convert only if meaningful
             if numeric.notna().mean() >= 0.2:
-                # CORE: NaN → 0
                 df[col] = numeric.fillna(0)
                 converted_cols.append(col)
+
+    # -----------------------------------
+    # Cross-field sign consistency
+    # -----------------------------------
+
+    _align_sign(df, "fob_value", "usd_fob")
+    _align_sign(df, "cif_value", "usd_cif")
+
+    # -----------------------------------
+    # Physical columns must be non-negative
+    # -----------------------------------
+
+    NON_NEGATIVE_COLS = [
+        "gross_weight",
+        "net_weight",
+        "quantity",
+        "package_amount"
+    ]
+
+    for col in NON_NEGATIVE_COLS:
+        if col in df.columns:
+            df[col] = df[col].abs()
 
     return df, converted_cols
