@@ -207,3 +207,43 @@ st.markdown(
     "<div class='footer'>Cleaning Engine v1.0</div>",
     unsafe_allow_html=True
 )
+# -----------------------------
+# 📘 Reference Manager (POST-RUN)
+# -----------------------------
+import pandas as pd
+
+st.divider()
+st.subheader("📘 Reference Manager")
+
+REF_DIR = "datasets/reference"
+MASTER_PATH = os.path.join(REF_DIR, "company_master.csv")
+REVIEW_PATH = os.path.join(REF_DIR, "importer_needs_review.csv")
+
+if os.path.exists(MASTER_PATH):
+
+    with st.expander("Open Reference Editor", expanded=False):
+
+        st.markdown("### Company Master (Editable)")
+
+        master_df = pd.read_csv(MASTER_PATH)
+        edited_master = st.data_editor(
+            master_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            key="master_editor"
+        )
+
+        st.markdown("### Importer Needs Review (Auto Generated)")
+
+        if os.path.exists(REVIEW_PATH):
+            review_df = pd.read_csv(REVIEW_PATH)
+            st.dataframe(review_df, use_container_width=True)
+        else:
+            st.info("No review file generated yet.")
+
+        # -----------------------------
+        # Save Button
+        # -----------------------------
+        if st.button("💾 Save Master Changes", use_container_width=True):
+            edited_master.to_csv(MASTER_PATH, index=False)
+            st.success("Company Master updated successfully ✅")
