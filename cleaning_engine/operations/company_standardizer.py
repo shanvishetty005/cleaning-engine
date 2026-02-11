@@ -15,6 +15,28 @@ LEGAL_SUFFIXES = {
     "SA", "BV", "NV", "SRL", "SPA"
 }
 
+BAD_NAME_TOKENS = {"", "NA", "N/A", "NULL", "NONE", "NAN"}
+
+
+# ---------------------------------
+# Helpers
+# ---------------------------------
+
+def normalize_key(x: str) -> str:
+    """Safe normalize for matching"""
+    if pd.isna(x):
+        return ""
+
+    s = str(x).upper().strip()
+
+    if s in BAD_NAME_TOKENS:
+        return ""
+
+    # collapse spaces
+    s = re.sub(r"\s+", " ", s)
+
+    return s
+
 
 def strip_suffix_noise(name: str) -> str:
     """Remove legal suffix tokens to improve matching"""
@@ -27,20 +49,17 @@ def strip_suffix_noise(name: str) -> str:
 # ---------------------------------
 
 def build_brand_roots(master_df: pd.DataFrame):
-    """
-    Build brand root list dynamically from standardized_name column
-    Example:
-        CLARIANT THAILAND LTD → CLARIANT
-    """
     roots = set()
 
     for val in master_df["standardized_name"]:
-        if pd.isna(val):
+        key = normalize_key(val)
+        if not key:
             continue
-        root = str(val).split()[0].upper()
-        roots.add(root)
 
-    # longer roots first (better matching)
+        root = key.split()[0]
+        if len(root) >= 3:
+            roots.add(root)
+
     return sorted(roots, key=len, reverse=True)
 
 
@@ -63,34 +82,29 @@ def standardize_company_names(
     review_flag_col: str,
     review_output_path: str
 ) -> pd.DataFrame:
-    """
-    Standardize company names using a master file.
-    Unknown companies are flagged and exported for review.
-    Brand collapse is driven by master file — not hardcoded.
-    """
 
     # -----------------------------
     # Load master
     # -----------------------------
     master_df = pd.read_csv(master_path)
 
-    master_df["core_name"] = (
-        master_df["core_name"]
-        .astype(str)
-        .str.upper()
-        .str.strip()
-    )
+    master_df["core_name"] = master_df["core_name"].apply(normalize_key)
+    master_df["standardized_name"] = master_df["standardized_name"].apply(normalize_key)
 
-    master_df["standardized_name"] = (
-        master_df["standardized_name"]
-        .astype(str)
-        .str.upper()
-        .str.strip()
-    )
+    master_df = master_df[
+        (master_df["core_name"] != "") &
+        (master_df["standardized_name"] != "")
+    ]
 
     master_map = dict(
         zip(master_df["core_name"], master_df["standardized_name"])
     )
+
+    # also allow suffix-stripped keys in map
+    master_map_suffix = {
+        strip_suffix_noise(k): v
+        for k, v in master_map.items()
+    }
 
     brand_roots = build_brand_roots(master_df)
 
@@ -102,15 +116,9 @@ def standardize_company_names(
     # -----------------------------
     for raw in df[column_name]:
 
-        # ---- null safe
-        if pd.isna(raw):
-            standardized_values.append(raw)
-            needs_review.append(False)
-            continue
+        key = normalize_key(raw)
 
-        key = str(raw).upper().strip()
-
-        if key in {"NA", "N/A", "NULL", ""}:
+        if key == "":
             standardized_values.append(None)
             needs_review.append(False)
             continue
@@ -128,8 +136,8 @@ def standardize_company_names(
         # -------------------------
         key_no_suffix = strip_suffix_noise(key)
 
-        if key_no_suffix in master_map:
-            standardized_values.append(master_map[key_no_suffix])
+        if key_no_suffix in master_map_suffix:
+            standardized_values.append(master_map_suffix[key_no_suffix])
             needs_review.append(False)
             continue
 
@@ -153,13 +161,14 @@ def standardize_company_names(
     df[review_flag_col] = needs_review
 
     # -----------------------------
-    # Export review file
+    # Export clean review file
     # -----------------------------
     review_df = (
-        df.loc[df[review_flag_col], column_name]
+        df.loc[df[review_flag_col], standardized_col]
         .dropna()
         .astype(str)
-        .str.upper()
+        .map(normalize_key)
+        .loc[lambda s: s.str.len() >= 3]
         .drop_duplicates()
         .sort_values()
         .to_frame(name="unmapped_core_name")

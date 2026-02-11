@@ -7,48 +7,98 @@ import streamlit as st
 from cleaning_engine.service import run_cleaning_job
 
 
-# -----------------------------
-# Page Config
-# -----------------------------
+# =====================================================
+# PAGE CONFIG
+# =====================================================
+
 st.set_page_config(
     page_title="Cleaning Engine",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# -----------------------------
-# Styling
-# -----------------------------
+# =====================================================
+# STYLE — PROFESSIONAL + HIKAL THEME BUTTON
+# =====================================================
+
 st.markdown("""
 <style>
-.block-container {padding-top:2rem;padding-bottom:2rem;}
-div.stButton > button {
-    background: linear-gradient(90deg,#0B5ED7,#198754);
-    color:white;border-radius:10px;font-weight:600;
+
+.block-container {
+    padding-top:1.5rem;
+    padding-bottom:2rem;
 }
-.card {
+
+/* ---------- Cards ---------- */
+
+.section-card {
     border:1px solid rgba(255,255,255,0.08);
-    border-radius:14px;padding:18px;
+    border-radius:14px;
+    padding:18px;
     background:rgba(255,255,255,0.02);
 }
+
+/* ---------- HIKAL THEME BUTTON ---------- */
+
+div.stButton > button {
+    background: linear-gradient(90deg, #0B5FA5, #1AA7A1);
+    color: white;
+    border-radius: 12px;
+    border: none;
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 0.6rem 1rem;
+    transition: all 0.25s ease-in-out;
+}
+
+/* Hover effect */
+div.stButton > button:hover {
+    background: linear-gradient(90deg, #0A4E8A, #178F89);
+    box-shadow: 0 0 0 2px rgba(26,167,161,0.35);
+    transform: translateY(-1px);
+}
+
+/* Click effect */
+div.stButton > button:active {
+    transform: translateY(0px) scale(0.98);
+}
+
+/* ---------- Download Buttons ---------- */
+
+div.stDownloadButton > button {
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+/* ---------- Footer ---------- */
+
 .footer {
-    margin-top:35px;padding-top:10px;
+    margin-top:40px;
+    padding-top:10px;
     border-top:1px solid rgba(255,255,255,0.08);
     color:rgba(255,255,255,0.55);
-    text-align:center;font-size:.85rem;
+    text-align:center;
+    font-size:.85rem;
 }
+
 </style>
 """, unsafe_allow_html=True)
 
-# -----------------------------
-# Reference Paths
-# -----------------------------
+
+
+# =====================================================
+# PATHS
+# =====================================================
+
 REF_DIR = "datasets/reference"
 os.makedirs(REF_DIR, exist_ok=True)
 
 MASTER_PATH = os.path.join(REF_DIR, "company_master.csv")
 ADD_PATH = os.path.join(REF_DIR, "company_master_additions.csv")
 REVIEW_PATH = os.path.join(REF_DIR, "importer_needs_review.csv")
+
+if not os.path.exists(MASTER_PATH):
+    pd.DataFrame(columns=["core_name","standardized_name"]).to_csv(MASTER_PATH,index=False)
 
 
 def load_csv_safe(path, cols):
@@ -58,15 +108,35 @@ def load_csv_safe(path, cols):
 
 
 # -----------------------------
-# Header
+# Header with Logo (Right Side)
 # -----------------------------
-st.title("Cleaning Engine")
-st.write("Upload CSV → Clean → Export standardized outputs.")
+logo_path = "cleaning_engine/assets/hikal_logo.png"   # adjust if your path differs
+
+col_title, col_logo = st.columns([5, 1])
+
+with col_title:
+    st.markdown("""
+        <div style="padding-top:20px">
+            <h1 style="margin-bottom:0;">Cleaning Engine</h1>
+            <div style="opacity:0.7;font-size:1.1rem;">
+                Enterprise Data Cleaning & Standardization Platform
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+with col_logo:
+    st.write("")  # spacer
+    st.write("")  # spacer pushes logo downward
+    if os.path.exists(logo_path):
+        st.image(logo_path, width=130)
+
 st.divider()
 
-# -----------------------------
-# Session Folder
-# -----------------------------
+
+# =====================================================
+# SESSION OUTPUT FOLDER
+# =====================================================
+
 sid = st.session_state.get("sid")
 if not sid:
     sid = str(uuid.uuid4())[:8]
@@ -74,12 +144,14 @@ if not sid:
 
 output_dir = os.path.join("outputs", sid)
 
-# -----------------------------
-# Sidebar Config
-# -----------------------------
-st.sidebar.header("Configuration")
 
-select_all = st.sidebar.checkbox("Select All Ops", True)
+# =====================================================
+# SIDEBAR — OPERATIONS
+# =====================================================
+
+st.sidebar.header("⚙️ Cleaning Operations")
+
+select_all = st.sidebar.checkbox("Select All", True)
 
 config = {
     "standardize_columns": st.sidebar.checkbox("Standardize Columns", select_all),
@@ -87,73 +159,102 @@ config = {
     "trim_text": st.sidebar.checkbox("Trim Text", select_all),
     "standardize_companies": st.sidebar.checkbox("Standardize Companies", select_all),
     "standardize_dates": st.sidebar.checkbox("Standardize Dates", select_all),
-    "convert_numeric": st.sidebar.checkbox("Numeric Convert", select_all),
+    "convert_numeric": st.sidebar.checkbox("Convert Numeric", select_all),
     "remove_empty_rows": st.sidebar.checkbox("Remove Empty Rows", select_all),
     "remove_duplicates": st.sidebar.checkbox("Remove Duplicates", select_all),
     "standardize_no": st.sidebar.checkbox("Standardize NO", select_all),
 }
 
+st.sidebar.divider()
+
+st.sidebar.subheader("📤 Exports")
 export_powerbi = st.sidebar.checkbox("PowerBI Output", True)
 generate_report = st.sidebar.checkbox("Comparison Report", True)
 
-# -----------------------------
-# ✅ Reference Data Editor
-# -----------------------------
+
+# =====================================================
+# SIDEBAR — REFERENCE MANAGER
+# =====================================================
+
 st.sidebar.divider()
-show_ref = st.sidebar.checkbox("Open Reference Editor")
+st.sidebar.header(" Reference Manager")
 
-if show_ref:
-    st.subheader("Reference Data Editor")
+if st.sidebar.checkbox("Open Manager"):
 
-    t1, t2, t3 = st.tabs([
-        "Company Master",
-        "Master Additions",
-        "Needs Review"
-    ])
+    master_df = load_csv_safe(MASTER_PATH, ["core_name","standardized_name"])
+    add_df = load_csv_safe(ADD_PATH, ["core_name","standardized_name"])
+    review_df = load_csv_safe(REVIEW_PATH, ["unmapped_core_name"])
 
-    with t1:
-        df = load_csv_safe(MASTER_PATH, ["core_name","standardized_name"])
-        edited = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-        if st.button("Save Company Master"):
-            edited.to_csv(MASTER_PATH, index=False)
-            st.success("Saved.")
+    # ---------- MASTER ----------
+    st.sidebar.subheader("Company Master")
 
-    with t2:
-        df = load_csv_safe(ADD_PATH, ["core_name","standardized_name"])
-        edited = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-        if st.button("Save Additions"):
-            edited.to_csv(ADD_PATH, index=False)
-            st.success("Saved.")
+    edited_master = st.sidebar.data_editor(
+        master_df,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="master_editor"
+    )
 
-    with t3:
-        df = load_csv_safe(REVIEW_PATH, ["importer_core_name"])
-        edited = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-        if st.button("Save Review List"):
-            edited.to_csv(REVIEW_PATH, index=False)
-            st.success("Saved.")
+    if st.sidebar.button("Save Master"):
+        edited_master.drop_duplicates("core_name").to_csv(MASTER_PATH,index=False)
+        st.sidebar.success("Saved")
 
-    st.divider()
 
-# -----------------------------
-# Layout
-# -----------------------------
-left, right = st.columns([1.3,1])
+    # ---------- ADDITIONS ----------
+    if not add_df.empty:
+        st.sidebar.subheader("Suggested Additions")
 
-with left:
-    st.subheader("Upload Data")
-    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-    run_clicked = st.button("Run Cleaning", use_container_width=True)
+        add_df = add_df[~add_df["core_name"].isin(master_df["core_name"])]
+        add_df["add"] = False
 
-with right:
-    st.subheader("File Info")
-    st.write(uploaded_file.name if uploaded_file else "No file")
+        add_sel = st.sidebar.data_editor(add_df, key="add_editor")
 
-# -----------------------------
-# Run Cleaning
-# -----------------------------
+        if st.sidebar.button("Add → Master"):
+            rows = add_sel[add_sel["add"]][["core_name","standardized_name"]]
+            if not rows.empty:
+                new = pd.concat([master_df, rows]).drop_duplicates("core_name")
+                new.to_csv(MASTER_PATH,index=False)
+                st.sidebar.success(f"Added {len(rows)}")
+
+
+    # ---------- REVIEW ----------
+    if not review_df.empty:
+        st.sidebar.subheader("Needs Review")
+
+        review_df["standardized_name"] = ""
+        review_df["add"] = False
+
+        rev_sel = st.sidebar.data_editor(review_df, key="review_editor")
+
+        if st.sidebar.button("Review → Master"):
+            rows = rev_sel[rev_sel["add"]]
+            if not rows.empty:
+                rows = rows.rename(columns={"unmapped_core_name":"core_name"})
+                rows = rows[["core_name","standardized_name"]]
+                new = pd.concat([master_df, rows]).drop_duplicates("core_name")
+                new.to_csv(MASTER_PATH,index=False)
+                st.sidebar.success(f"Added {len(rows)}")
+
+
+# =====================================================
+# MAIN — UPLOAD
+# =====================================================
+
+st.subheader("1️⃣ Upload Data")
+
+uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+
+run_clicked = st.button("Run Cleaning", use_container_width=True)
+
+
+# =====================================================
+# RUN CLEANING
+# =====================================================
+
 if uploaded_file and run_clicked:
 
     os.makedirs(output_dir, exist_ok=True)
+
     input_path = os.path.join(output_dir,"raw.csv")
 
     with open(input_path,"wb") as f:
@@ -161,7 +262,7 @@ if uploaded_file and run_clicked:
 
     start = time.time()
 
-    with st.spinner("Cleaning..."):
+    with st.spinner("Running cleaning pipeline..."):
         cleaned_df, summary, outputs = run_cleaning_job(
             input_csv_path=input_path,
             output_dir=output_dir,
@@ -172,78 +273,49 @@ if uploaded_file and run_clicked:
 
     if not export_powerbi:
         outputs.pop("powerbi_file",None)
+
     if not generate_report:
         outputs.pop("comparison_report",None)
 
+    # ---------- RESULTS ----------
     st.divider()
-    st.subheader("Results")
-
-    st.json(summary)
+    st.subheader("2️⃣ Results")
 
     c1,c2,c3 = st.columns(3)
     c1.metric("Rows", cleaned_df.shape[0])
-    c2.metric("Cols", cleaned_df.shape[1])
-    c3.metric("Time", exec_time)
+    c2.metric("Columns", cleaned_df.shape[1])
+    c3.metric("Time (s)", exec_time)
 
-    st.dataframe(cleaned_df.head(20), use_container_width=True)
+    st.json(summary)
 
-    st.subheader("Downloads")
+    st.dataframe(cleaned_df.head(25), use_container_width=True)
 
-    for k,label in [
-        ("cleaned_file","Cleaned"),
-        ("powerbi_file","PowerBI"),
-        ("comparison_report","Comparison")
+    # ---------- DOWNLOADS ----------
+    st.subheader("3️⃣ Downloads")
+
+    for key,label,name in [
+        ("cleaned_file","Cleaned File","cleaned_file.csv"),
+        ("powerbi_file","PowerBI File","cleaned_powerbi.csv"),
+        ("comparison_report","Comparison Report","comparison.csv")
     ]:
-        if k in outputs:
-            with open(outputs[k],"rb") as f:
-                st.download_button(f"Download {label}", f)
+        if key in outputs and os.path.exists(outputs[key]):
+            with open(outputs[key],"rb") as f:
+                st.download_button(
+                    f"Download {label}",
+                    f.read(),
+                    file_name=name,
+                    mime="text/csv",
+                    use_container_width=True
+                )
 
-    st.success("Done.")
+    st.success("Cleaning completed successfully ")
 
-# -----------------------------
-# Footer
-# -----------------------------
+
+# =====================================================
+# FOOTER
+# =====================================================
+
 st.markdown(
-    "<div class='footer'>Cleaning Engine v1.0</div>",
+    "<div class='footer'>Cleaning Engine • Internal Data Standardization Tool</div>",
     unsafe_allow_html=True
 )
-# -----------------------------
-# 📘 Reference Manager (POST-RUN)
-# -----------------------------
-import pandas as pd
-
-st.divider()
-st.subheader("📘 Reference Manager")
-
-REF_DIR = "datasets/reference"
-MASTER_PATH = os.path.join(REF_DIR, "company_master.csv")
-REVIEW_PATH = os.path.join(REF_DIR, "importer_needs_review.csv")
-
-if os.path.exists(MASTER_PATH):
-
-    with st.expander("Open Reference Editor", expanded=False):
-
-        st.markdown("### Company Master (Editable)")
-
-        master_df = pd.read_csv(MASTER_PATH)
-        edited_master = st.data_editor(
-            master_df,
-            num_rows="dynamic",
-            use_container_width=True,
-            key="master_editor"
-        )
-
-        st.markdown("### Importer Needs Review (Auto Generated)")
-
-        if os.path.exists(REVIEW_PATH):
-            review_df = pd.read_csv(REVIEW_PATH)
-            st.dataframe(review_df, use_container_width=True)
-        else:
-            st.info("No review file generated yet.")
-
-        # -----------------------------
-        # Save Button
-        # -----------------------------
-        if st.button("💾 Save Master Changes", use_container_width=True):
-            edited_master.to_csv(MASTER_PATH, index=False)
-            st.success("Company Master updated successfully ✅")

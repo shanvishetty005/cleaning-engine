@@ -115,7 +115,7 @@ def infer_numeric_columns(df: pd.DataFrame):
     ]
 
     for col in NON_NEGATIVE_COLS:
-        if col in df.columns:
+        if col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
             df[col] = df[col].abs()
 
     return df, converted_cols
